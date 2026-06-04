@@ -9,22 +9,8 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
-    @StateObject private var appViewModel = AppViewModel()
-
-        var body: some View {
-            Group {
-                switch appViewModel.selectedMode {
-                case .blind:
-                    BlindView()
-                case .safety:
-                    SafetyView()
-                case .none:
-                    ModeSelectView()
-                }
-            }
-            .environmentObject(appViewModel)
+    var body: some View {
+        Text("Hello, World!")
     }
 }
-#Preview {
-    ContentView()
-}
+

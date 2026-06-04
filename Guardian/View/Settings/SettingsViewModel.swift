@@ -9,14 +9,5 @@ import SwiftUI
 import Combine
 
 class SettingsViewModel: ObservableObject {
-    @Published var emergencyContacts: [EmergencyContact] = []
-    @Published var userName: String = ""
 
-    func addContact(_ contact: EmergencyContact) {
-        emergencyContacts.append(contact)
-    }
-
-    func removeContact(at offsets: IndexSet) {
-        emergencyContacts.remove(atOffsets: offsets)
-    }
 }
