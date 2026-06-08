@@ -1,16 +1,18 @@
-//
-//  ContentView.swift
-//  Guardian
-//
-//  Created by 정윤수 on 5/31/26.
-//
+// ContentView.swift
+// Guardian Blind
 
 import SwiftUI
-import SwiftData
 
 struct ContentView: View {
+
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @StateObject private var viewModel = BlindViewModel()
+
     var body: some View {
-        Text("Hello, World!")
+        if hasCompletedOnboarding {
+            BlindView(viewModel: viewModel)
+        } else {
+            OnboardingView()
+        }
     }
 }
-

@@ -1,8 +1,3 @@
-//
-//  BlindViewModel.swift
-//  Guardian
-//
-//  Created by 정윤수 on 6/1/26.
 // BlindViewModel.swift
 // Guardian Blind
 
@@ -12,7 +7,7 @@ import Combine
 @MainActor
 final class BlindViewModel: ObservableObject {
 
-    // MARK: - Published (View에서 구독)
+    // MARK: - Published
     @Published var detectedObjects: [DetectedObject] = []
     @Published var entranceCandidate: EntranceCandidate? = nil
     @Published var isSearchingEntrance: Bool = false
@@ -25,29 +20,26 @@ final class BlindViewModel: ObservableObject {
     private let entranceService: EntranceDetectionServiceProtocol
 
     private var cancellables = Set<AnyCancellable>()
-
-    // ---------------------------------------------------------------
-    // 이전 프레임 객체 ID 추적
-    // 이미 발화한 객체는 재진입 전까지 다시 말하지 않음
-    // ---------------------------------------------------------------
     private var spokenObjectIDs = Set<UUID>()
 
+    // MARK: - Init
+    // @MainActor 파라미터 기본값에서 직접 인스턴스 생성 불가 → nil로 받고 내부에서 생성
     init(
         lidarService: LiDARServiceProtocol? = nil,
         ttsService: TTSServiceProtocol? = nil,
         sosService: SOSService? = nil,
         entranceService: EntranceDetectionServiceProtocol? = nil
     ) {
-        self.lidarService = lidarService ?? LiDARService()
-        self.ttsService = ttsService ?? TTSService()
-        self.sosService = sosService ?? SOSService()
+        self.lidarService    = lidarService    ?? LiDARService()
+        self.ttsService      = ttsService      ?? TTSService()
+        self.sosService      = sosService      ?? SOSService()
         self.entranceService = entranceService ?? EntranceDetectionService()
 
         loadSettings()
         bindServices()
     }
 
-    // MARK: - 시작/종료
+    // MARK: - 생명주기
 
     func start() {
         lidarService.start()
@@ -60,7 +52,7 @@ final class BlindViewModel: ObservableObject {
         entranceService.stop()
     }
 
-    // MARK: - 출입구 찾기 버튼 탭
+    // MARK: - 출입구 찾기
 
     func startEntranceSearch() {
         guard !isSearchingEntrance else { return }
@@ -70,7 +62,7 @@ final class BlindViewModel: ObservableObject {
         ttsService.speak("출입구를 찾고 있습니다", priority: .general)
     }
 
-    // MARK: - Settings 저장/불러오기
+    // MARK: - 설정 저장/불러오기
 
     func saveSettings(_ newSettings: GuardianSettings) {
         settings = newSettings
@@ -82,14 +74,29 @@ final class BlindViewModel: ObservableObject {
 
     private func loadSettings() {
         guard let data = UserDefaults.standard.data(forKey: "GuardianSettings"),
-              let saved = try? JSONDecoder().decode(GuardianSettings.self, from: data) else { return }
+              let saved = try? JSONDecoder().decode(GuardianSettings.self, from: data)
+        else { return }
         settings = saved
+    }
+
+    // MARK: - TTS 헬퍼 (View에서 직접 호출용)
+
+    /// 앱 시작 시 음성 안내
+    func announceStart() {
+        ttsService.speak(
+            "Guardian 시작됩니다. 주변 장애물을 감지합니다. 화면 왼쪽 아래를 탭하면 읽어줘, 오른쪽 아래를 탭하면 출입구 찾기입니다.",
+            priority: .warning
+        )
+    }
+
+    /// 외부(View)에서 직접 TTS 호출
+    func speak(_ text: String, priority: TTSPriority = .general) {
+        ttsService.speak(text, priority: priority)
     }
 
     // MARK: - 서비스 바인딩
 
     private func bindServices() {
-        // LiDAR → 감지 객체 업데이트 + TTS
         lidarService.detectedObjectsPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] objects in
@@ -97,7 +104,6 @@ final class BlindViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // 출입구 감지 결과
         entranceService.entranceFoundPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] candidate in
@@ -106,30 +112,26 @@ final class BlindViewModel: ObservableObject {
             .store(in: &cancellables)
     }
 
-    // MARK: - 감지 처리
-
     private func handleDetectedObjects(_ objects: [DetectedObject]) {
         detectedObjects = objects
 
-        // EntranceDetectionService에 LiDAR 데이터 forwarding
-        if isSearchingEntrance, let service = entranceService as? EntranceDetectionService{
+        if isSearchingEntrance,
+           let service = entranceService as? EntranceDetectionService {
             service.processLiDARObjects(objects)
         }
 
-        // 민감도 기준 이하 + 새로 진입한 객체만 발화
         let threshold = settings.sensitivity.threshold
         let newObjects = objects.filter {
             $0.distance <= threshold && !spokenObjectIDs.contains($0.id)
         }
 
-        // 우선순위 분류
         for object in newObjects {
             spokenObjectIDs.insert(object.id)
-            let priority: TTSPriority = (object.type == .vechicle || object.type == .person) ? .warning : .general
+            let priority: TTSPriority = (object.type == .vehicle || object.type == .person)
+                ? .warning : .general
             ttsService.speak(object.ttsDescription, priority: priority)
         }
 
-        // 범위 벗어난 객체 ID 제거 → 재진입 시 다시 발화
         let currentIDs = Set(objects.map { $0.id })
         spokenObjectIDs = spokenObjectIDs.filter { currentIDs.contains($0) }
     }
